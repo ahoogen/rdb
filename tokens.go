@@ -11,7 +11,6 @@ const (
 
 	EOF                 // End of file
 	WS                  // Whitespace
-	unparsed            // Unparsed text
 	naturalNumber       // 0, 1, 2, ..., n
 	integer             // ..., -1, 0, 1, ...
 	fixedNumber         // 3.1415
@@ -73,6 +72,7 @@ const (
 	usingToken
 	orderByToken
 	groupByToken
+	unparsed // Unparsed text
 )
 
 const (

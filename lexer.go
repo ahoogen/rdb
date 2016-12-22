@@ -299,7 +299,7 @@ func (l *lexer) scanKeyword() item {
 	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), naturalJoinStmt) {
 		return item{naturalJoinToken, naturalJoinStmt}
 	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), naturalLeftJoinStmt) {
-		return item{naturalLeftJoinToken, naturalJoinStmt}
+		return item{naturalLeftJoinToken, naturalLeftJoinStmt}
 	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), naturalLeftOuterJoinStmt) {
 		return item{naturalLeftOuterJoinToken, naturalLeftOuterJoinStmt}
 	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), naturalRightJoinStmt) {
@@ -377,7 +377,7 @@ func (l *lexer) scanKeyword() item {
 	var buf bytes.Buffer
 	for {
 		ch := l.read()
-		if isWhitespace(ch) || ch == eof {
+		if !isAlphanum(ch) {
 			l.unread()
 			break
 		}
