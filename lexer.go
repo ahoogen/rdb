@@ -31,6 +31,31 @@ func lexSelect(l *lexer) stateFn {
 	l.pos += len(selectStmt)
 	l.emit(selectToken)
 
+	return lexFrom
+}
+
+func lexInsert(l *lexer) stateFn {
+	l.pos += len(insertStmt)
+	l.emit(insertToken)
+
+	return lexValues
+}
+
+func lexFrom(l *lexer) stateFn {
+	l.pos += len(fromStmt)
+	l.emit(fromToken)
+
+	return lexDump
+}
+
+func lexValues(l *lexer) stateFn {
+
+	return lexDump
+}
+
+func lexDump(l *lexer) stateFn {
+	l.dump()
+	return nil
 }
 
 func lexStatement(l *lexer) stateFn {
@@ -49,14 +74,13 @@ func lexStatement(l *lexer) stateFn {
 
 // NewLexer creates and returns a new lexer scanner from the provided Reader.
 // Reader can be supplied by strings.NewReader(myString)
-func lex(name, query string) (*lexer, chan item) {
+func lex(query string) *lexer {
 	l := &lexer{
-		name:  name,
 		input: query,
-		items: make(chan item),
+		//items: make(chan item),
 	}
-	go l.run()
-	return l, l.items
+	// go l.run()
+	return l //, l.items
 }
 
 func (l *lexer) run() {
@@ -107,9 +131,12 @@ func (l *lexer) scan() item {
 	} else if isNumeric(ch) || ch == '-' || ch == '+' {
 		l.unread()
 		return l.scanNumber()
-	} else if isAlphanum(ch) || ch == '\'' || ch == '"' || ch == '`' {
+	} else if isLetter(ch) {
 		l.unread()
-		return l.scanIdent()
+		return l.scanKeyword()
+	} else if ch == '\'' || ch == '"' || ch == '`' {
+		l.unread()
+		return l.scanQuoted()
 	}
 
 	switch ch {
@@ -181,7 +208,7 @@ func (l *lexer) scanNumber() item {
 // whitespace characters
 func (l *lexer) scanWhitespace() item {
 	var buf bytes.Buffer
-	buf.WriteRune(s.read())
+	buf.WriteRune(l.read())
 
 	for {
 		if ch := l.read(); ch == eof {
@@ -200,45 +227,33 @@ func (l *lexer) scanWhitespace() item {
 // scanIdent fetches the next token from a lexing stream and returns the matched
 // token type, or a token type of IDENTIFIER if it is not one of the SQL Keywords
 // Any quoted identifier must begin and end with the same type of quote.
-func (l *lexer) scanIdent() item {
+func (l *lexer) scanQuoted() item {
 	var buf bytes.Buffer
 	var first, last rune
 	first = l.read()
 	buf.WriteRune(first)
-	var quoted bool
-
-	switch first {
-	case '\'', '"', '`':
-		quoted = true
-	default:
-		quoted = false
-	}
 
 	for {
 		// Stop at EOF
 		if ch := l.read(); ch == eof {
 			break
 
-			// Stop at first non alphanumeric if toekn isn't quoted
-		} else if !quoted && !isAlphanum(ch) {
-			l.unread()
-			break
-
 			// If we're quoted atop at first matching unescaped quote
-		} else if quoted && ch == first {
+		} else if ch == first {
 			buf.WriteRune(ch)
 			check := last
 			last = ch
-			next, err := l.r.Peek(1)
+			next := l.read()
+			l.unread()
 
 			// If Peek is EOF we're already at the end of the string and past
 			// quote escaping checking
-			if err != nil {
+			if next == eof {
 				break
 			}
 
 			// If we're at a quote
-			if ch == '`' || ((check != '\\' && check != ch) && rune(next[0]) != ch) {
+			if ch == '`' || ((check != '\\' && check != ch) && next != ch) {
 				break
 			}
 
@@ -249,106 +264,127 @@ func (l *lexer) scanIdent() item {
 		}
 	}
 
-	if quoted && first != last {
+	if first != last {
 		return item{illegal, buf.String()}
 	}
 
-	// The following represents a subset of keywords that MySQL supports.
-	// TODO: Performance would benefit by moving to a btree type structure
-	// It's a small list but still 60 tokens, drop check time to O(log(n)) from O(n)
-	// and should this token list grow (for instance when string and math functions
-	// are added), that'd be a good thing to have set up.
-	switch strings.ToUpper(buf.String()) {
-	case selectStmt:
-		return item{selectToken, buf.String()}
-	case insertStmt:
-		return item{insertToken, buf.String()}
-	case fromStmt:
-		return item{fromToken, buf.String()}
-	case partitionStmt:
-		return item{partitionToken, buf.String()}
-	case asStmt:
-		return item{asToken, buf.String()}
-	case straightJoinStmt:
-		return item{straightJoinToken, buf.String()}
-	case crossJoinStmt:
-		return item{cross, buf.String()}
-	case innerJoinStmt:
-		return item{inner, buf.String()}
-	case "OUTER":
-		return item{outer, buf.String()}
-	case "OJ":
-		return item{oj, buf.String()}
-	case "NATURAL":
-		return item{natural, buf.String()}
-	case "LEFT":
-		return item{left, buf.String()}
-	case "RIGHT":
-		return item{right, buf.String()}
-	case "JOIN":
-		return item{join, buf.String()}
-	case "WHERE":
-		return item{where, buf.String()}
-	case "VALUES", "VALUE":
-		return item{values, buf.String()}
-	case "SET":
-		return item{set, buf.String()}
-	case "DEFAULT":
-		return item{defaultValue, buf.String()}
-	case "ALL":
-		return item{all, buf.String()}
-	case "DISTINCT", "DISTINCTROW":
-		return item{distinct, buf.String()}
-	case "HIGH_PRIORITY":
-		return item{highPriority, buf.String()}
-	case "LOW_PRIORITY":
-		return item{lowPriority, buf.String()}
-	case "DELAYED":
-		return item{delayed, buf.String()}
-	case "MAX_STATEMENT_TIME":
-		return item{maxStatementTime, buf.String()}
-	case "SQL_SMALL_RESULT":
-		return item{sqlSmallResult, buf.String()}
-	case "SQL_BIG_RESULT":
-		return item{sqlBigResult, buf.String()}
-	case "SQL_BUFFER_RESULT":
-		return item{sqlBufferResult, buf.String()}
-	case "SQL_CACHE":
-		return item{sqlCache, buf.String()}
-	case "SQL_NO_CACHE":
-		return item{sqlNoCache, buf.String()}
-	case "SQL_CALC_FOUND_ROWS":
-		return item{sqlCalcFoundRows, buf.String()}
-	case "ON":
-		return item{on, buf.String()}
-	case "USING":
-		return item{using, buf.String()}
-	case "USE":
-		return item{use, buf.String()}
-	case "IGNORE":
-		return item{ignore, buf.String()}
-	case "FORCE":
-		return item{force, buf.String()}
-	case "INDEX":
-		return item{index, buf.String()}
-	case "KEY":
-		return item{key, buf.String()}
-	case "FOR":
-		return item{forStmt, buf.String()}
-	case "ORDER":
-		return item{order, buf.String()}
-	case "GROUP":
-		return item{group, buf.String()}
-	case "BY":
-		return item{by, buf.String()}
-	}
-
 	var tok = identifier
-	if quoted && first != '`' {
+	if first != '`' {
 		tok = quotedString
 	}
 
 	return item{tok, buf.String()}
+}
+
+func (l *lexer) scanKeyword() item {
+	if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), selectStmt) {
+		l.pos += len(selectStmt)
+		return item{selectToken, selectStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), insertStmt) {
+		return item{insertToken, insertStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), fromStmt) {
+		return item{fromToken, fromStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), partitionStmt) {
+		return item{partitionToken, partitionStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), asStmt) {
+		return item{asToken, asStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), straightJoinStmt) {
+		return item{straightJoinToken, straightJoinStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), crossJoinStmt) {
+		return item{crossJoinToken, crossJoinStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), innerJoinStmt) {
+		return item{innerJoinToken, innerJoinStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), ojStmt) {
+		return item{ojToken, ojStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), naturalJoinStmt) {
+		return item{naturalJoinToken, naturalJoinStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), naturalLeftJoinStmt) {
+		return item{naturalLeftJoinToken, naturalJoinStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), naturalLeftOuterJoinStmt) {
+		return item{naturalLeftOuterJoinToken, naturalLeftOuterJoinStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), naturalRightJoinStmt) {
+		return item{naturalRightJoinToken, naturalRightJoinStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), naturalRightOuterJoinStmt) {
+		return item{naturalRightOuterJoinToken, naturalRightOuterJoinStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), leftJoinStmt) {
+		return item{leftJoinToken, leftJoinStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), leftOuterJoinStmt) {
+		return item{leftOuterJoinToken, leftOuterJoinStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), rightJoinStmt) {
+		return item{rightJoinToken, rightJoinStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), rightOuterJoinStmt) {
+		return item{rightOuterJoinToken, rightOuterJoinStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), useIndexStmt) {
+		return item{useIndexToken, useIndexStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), useKeyStmt) {
+		return item{useKeyToken, useKeyStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), ignoreIndexStmt) {
+		return item{ignoreIndexToken, ignoreIndexStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), ignoreKeyStmt) {
+		return item{ignoreKeyToken, ignoreKeyStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), forceIndexStmt) {
+		return item{forceIndexToken, forceIndexStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), forceKeyStmt) {
+		return item{forceKeyToken, forceKeyStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), forJoinStmt) {
+		return item{forJoinToken, forJoinStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), forOrderByStmt) {
+		return item{forOrderByToken, forOrderByStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), forGroupByStmt) {
+		return item{forGroupByToken, forGroupByStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), whereStmt) {
+		return item{whereToken, whereStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), valuesStmt) {
+		return item{valuesToken, valuesStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), setStmt) {
+		return item{setToken, setStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), defaultStmt) {
+		return item{defaultToken, defaultStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), allStmt) {
+		return item{allToken, allStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), distinctStmt) {
+		return item{distinctToken, distinctStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), highPriorityStmt) {
+		return item{highPriorityToken, highPriorityStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), lowPriorityStmt) {
+		return item{lowPriorityToken, lowPriorityStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), delayedStmt) {
+		return item{delayedToken, delayedStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), maxStatementTimeStmt) {
+		return item{maxStatementTimeToken, maxStatementTimeStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), sqlSmallResultStmt) {
+		return item{sqlSmallResultToken, sqlSmallResultStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), sqlBigResultStmt) {
+		return item{sqlBigResultToken, sqlBigResultStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), sqlBufferResultStmt) {
+		return item{sqlBufferResultToken, sqlBufferResultStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), sqlCacheStmt) {
+		return item{sqlCacheToken, sqlCacheStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), sqlNoCacheStmt) {
+		return item{sqlNoCacheToken, sqlNoCacheStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), sqlCalcFoundRowsStmt) {
+		return item{sqlCalcFoundRowsToken, sqlCalcFoundRowsStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), onStmt) {
+		return item{onToken, onStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), usingStmt) {
+		return item{usingToken, usingStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), orderByStmt) {
+		return item{orderByToken, orderByStmt}
+	} else if strings.HasPrefix(strings.ToUpper(l.input[l.pos:]), groupByStmt) {
+		return item{groupByToken, groupByStmt}
+	}
+
+	var buf bytes.Buffer
+	for {
+		ch := l.read()
+		if isWhitespace(ch) || ch == eof {
+			l.unread()
+			break
+		}
+		buf.WriteRune(ch)
+	}
+
+	return item{identifier, buf.String()}
 }
 
 // isWhitespace is a helper function to identify whitespace characters within

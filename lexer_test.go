@@ -69,15 +69,11 @@ func TestIsAlphanum(t *testing.T) {
 	}
 }
 
-func newLexerFromString(s string) *lexer {
-	return NewLexer(s)
-}
-
 func TestNewScanner(t *testing.T) {
 	str := "I am a happy new string reader"
-	s := newLexerFromString(str)
+	s := lex(str)
 	for i := 0; i < len(str); i++ {
-		ch, _, _ := s.r.ReadRune()
+		ch := s.read()
 		if string(ch) != str[i:i+1] {
 			t.Errorf("Expected: %s Got: %s", str[i:i+1], string(ch))
 		}
@@ -86,7 +82,7 @@ func TestNewScanner(t *testing.T) {
 
 func TestRead(t *testing.T) {
 	str := "I am a happy new string reader"
-	s := newLexerFromString(str)
+	s := lex(str)
 	for i := 0; i < len(str); i++ {
 		ch := s.read()
 		if string(ch) != str[i:i+1] {
@@ -102,7 +98,7 @@ func TestRead(t *testing.T) {
 
 func TestUnread(t *testing.T) {
 	str := "abcd"
-	s := newLexerFromString(str)
+	s := lex(str)
 	var ch rune
 	ch = s.read()
 	if ch != 'a' {
@@ -129,7 +125,7 @@ func TestUnread(t *testing.T) {
 
 func TestScanWhitespace(t *testing.T) {
 	str := "   \n \t\t   \n \t"
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != WS {
 		t.Errorf("Failed to get expected whitespace token, got IOTA %d instead", int(item.Token))
@@ -141,7 +137,7 @@ func TestScanWhitespace(t *testing.T) {
 
 func TestScanWhitespaceStops(t *testing.T) {
 	str := "   \n \t\tiamnotwhitespace   \n \t"
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != WS {
 		t.Errorf("Failed to get expected whitespace token, got IOTA %d instead", int(item.Token))
@@ -153,7 +149,7 @@ func TestScanWhitespaceStops(t *testing.T) {
 
 func TestScanGetsEOF(t *testing.T) {
 	str := ""
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != EOF {
 		t.Errorf("Expected %d, got %s", EOF, item.Value)
@@ -162,7 +158,7 @@ func TestScanGetsEOF(t *testing.T) {
 
 func TestScanGetsAstrisk(t *testing.T) {
 	str := "*"
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != astrisk {
 		t.Errorf("Expected %d, got %d", astrisk, item.Token)
@@ -174,7 +170,7 @@ func TestScanGetsAstrisk(t *testing.T) {
 
 func TestScanGetsComma(t *testing.T) {
 	str := ","
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != comma {
 		t.Errorf("Expected %d, got %d", comma, item.Token)
@@ -186,7 +182,7 @@ func TestScanGetsComma(t *testing.T) {
 
 func TestScanGetsPeriod(t *testing.T) {
 	str := "."
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != period {
 		t.Errorf("Expected %d, got %d", period, item.Token)
@@ -198,7 +194,7 @@ func TestScanGetsPeriod(t *testing.T) {
 
 func TestScanGetsLParen(t *testing.T) {
 	str := "("
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != lParen {
 		t.Errorf("Expected %d, got %d", lParen, item.Token)
@@ -210,7 +206,7 @@ func TestScanGetsLParen(t *testing.T) {
 
 func TestScanGetsRParen(t *testing.T) {
 	str := ")"
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != rParen {
 		t.Errorf("Expected %d, got %d", rParen, item.Token)
@@ -222,7 +218,7 @@ func TestScanGetsRParen(t *testing.T) {
 
 func TestScanGetsLBrace(t *testing.T) {
 	str := "{"
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != lBrace {
 		t.Errorf("Expected %d, got %d", lBrace, item.Token)
@@ -234,7 +230,7 @@ func TestScanGetsLBrace(t *testing.T) {
 
 func TestScanGetsRBrace(t *testing.T) {
 	str := "}"
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != rBrace {
 		t.Errorf("Expected RBRACE, got %d", item.Token)
@@ -246,7 +242,7 @@ func TestScanGetsRBrace(t *testing.T) {
 
 func TestScanGetsIllegal(t *testing.T) {
 	str := "@"
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != illegal {
 		t.Errorf("Expected %d, got %d", illegal, item.Token)
@@ -258,7 +254,7 @@ func TestScanGetsIllegal(t *testing.T) {
 
 func TestScanGetsIdentifier(t *testing.T) {
 	str := "iamnotakeyword"
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != identifier {
 		t.Errorf("Expected %d, got %d", identifier, item.Token)
@@ -270,7 +266,7 @@ func TestScanGetsIdentifier(t *testing.T) {
 
 func TestScanGetsQuotedIdentifier(t *testing.T) {
 	str := "`iamnotakeyword`"
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != identifier {
 		t.Errorf("Expected %d, got %d", identifier, item.Token)
@@ -282,7 +278,7 @@ func TestScanGetsQuotedIdentifier(t *testing.T) {
 
 func TestScanGetsIllegalMismatchedQuote(t *testing.T) {
 	str := "`iamnotakeyword'"
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != illegal {
 		t.Errorf("Expected %d, got %d", illegal, item.Token)
@@ -294,7 +290,7 @@ func TestScanGetsIllegalMismatchedQuote(t *testing.T) {
 
 func TestScanEndsAtFirstMatchedQuote(t *testing.T) {
 	str := "`iamnota`keyword'"
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != identifier {
 		t.Errorf("Expected %d, got %d", identifier, item.Token)
@@ -306,7 +302,7 @@ func TestScanEndsAtFirstMatchedQuote(t *testing.T) {
 
 func TestScanHandlesEscapedSQuoteSquote(t *testing.T) {
 	str := "'iamnota''keyword'"
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != quotedString {
 		t.Errorf("Expected %d, got %d", quotedString, item.Token)
@@ -318,7 +314,7 @@ func TestScanHandlesEscapedSQuoteSquote(t *testing.T) {
 
 func TestScanHandlesEscapedBslashSquote(t *testing.T) {
 	str := "'iamnota\\'keyword'"
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != quotedString {
 		t.Errorf("Expected %d, got %d", quotedString, item.Token)
@@ -330,7 +326,7 @@ func TestScanHandlesEscapedBslashSquote(t *testing.T) {
 
 func TestScanHandlesEscapedBslashDquote(t *testing.T) {
 	str := `"iamnota\\"keyword"`
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != quotedString {
 		t.Errorf("Expected %d, got %d", quotedString, item.Token)
@@ -342,7 +338,7 @@ func TestScanHandlesEscapedBslashDquote(t *testing.T) {
 
 func TestScanHandlesEscapedDquoteDquote(t *testing.T) {
 	str := `"iamnota""keyword"`
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != quotedString {
 		t.Errorf("Expected %d, got %d", quotedString, item.Token)
@@ -354,7 +350,7 @@ func TestScanHandlesEscapedDquoteDquote(t *testing.T) {
 
 func TestScanHandlesQuotedQuoteChars(t *testing.T) {
 	str := "'iam`nota``keyw''\"ord'"
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != quotedString {
 		t.Errorf("Expected %d, got %d", quotedString, item.Token)
@@ -371,7 +367,7 @@ func TestScanEndsAtNonAlphanum(t *testing.T) {
 	// This test produces (as far as RDB is concerned) valid token IDENTIFIER iam
 	// And the token ILLEGAL mismatch quoted string `nota keyword'
 	str := "iam`nota keyword'"
-	s := newLexerFromString(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != identifier {
 		t.Errorf("Expected %d, got %s", identifier, item.Value)
@@ -387,7 +383,7 @@ func TestScanEndsAtNonAlphanum(t *testing.T) {
 
 func TestScanNumberStopsAtWhitespace(t *testing.T) {
 	str := "3.14159 2.22e4"
-	s := NewLexer(str)
+	s := lex(str)
 	item := s.scan()
 	if item.Token != fixedNumber {
 		t.Errorf("Expected %d, got %d", fixedNumber, item.Token)
@@ -427,7 +423,7 @@ func TestKeywordTokens(t *testing.T) {
 		"ON", "USING", "USE", "IGNORE", "FORCE", "INDEX", "KEY", "FOR", "ORDER", "GROUP", "BY",
 	}
 	for i, str := range strs {
-		s := newLexerFromString(str)
+		s := lex(str)
 		item := s.scan()
 		if item.Token != token(i) {
 			t.Errorf("Expected token %d (%s) but got token %d (%s)", i, strs[i], item.Token, item.Value)
